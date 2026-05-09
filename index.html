@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABS Monitor — Sistema de Diagnóstico</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Nunito:wght@400;500;700;900&family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap"
+    rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #000000;
+      --wt: #FFFFFF;
+      --text: #000000;
+      --ok: #00aa55;
+      --warn: #ffaa00;
+      --fail: #cc0000;
+      --neutral: #666666;
+
+      --font-display: 'Nunito', sans-serif;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-body: 'DM Sans', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--wt);
+      color: var(--bg);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: var(--wt);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--wt);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--bg);
+      display: flex;
+      align-items: center;
+      padding: 0 2rem;
+      height: 62px;
+      gap: 0;
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--bg);
+      letter-spacing: 0.12em;
+      white-space: nowrap;
+      margin-right: 2.5rem;
+    }
+
+    .nav-logo span {
+      color: var(--bg);
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 0;
+      flex: 1;
+    }
+
+    .nav-tab {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      color: var(--text);
+      padding: 0 1.4rem;
+      height: 62px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      user-select: none;
+    }
+
+    .nav-tab:hover {
+      color: var(--text);
+    }
+
+    .nav-tab.active {
+      color: var(--bg);
+      border-bottom-color: var(--bg);
+      background: var(--wt)
+    }
+
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text);
+      margin-left: auto;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--fail);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: var(--ok);
+      box-shadow: 0 0 8px var(--ok);
+      animation: pulse 2s infinite;
+    }
+
+    /* FIX #9: Indicador visual de reconexión automática */
+    .status-dot.reconnecting {
+      background: var(--warn);
+      box-shadow: 0 0 8px var(--warn);
+      animation: pulse 0.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes falla-pulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(255, 51, 85, 0.1); }
+      50% { box-shadow: 0 0 35px rgba(255, 51, 85, 0.25); }
+    }
+
+    .page {
+      display: none;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .dashboard-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 2rem;
+    }
+
+    .dashboard-title {
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      color: var(--text);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
+    .dashboard-time {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+
+    .sensors-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .sensor-card {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 4px;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .sensor-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--wt);
+      transition: background 0.3s;
+    }
+
+    .sensor-card.estado-girando::before { background: var(--ok); }
+    .sensor-card.estado-plano::before   { background: var(--warn); }
+    .sensor-card.estado-falla::before   { background: var(--fail); }
+
+    .sensor-card.estado-falla {
+      border-color: rgba(255, 51, 85, 0.3);
+      animation: falla-pulse 1.5s ease-in-out infinite;
+    }
+
+    .sensor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.2rem;
+    }
+
+    .sensor-id {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      color: var(--text);
+      letter-spacing: 0.2em;
+    }
+
+    .sensor-name {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 0.2rem;
+    }
+
+    .sensor-badge {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 2px;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-iniciando {
+      background: rgba(85, 102, 170, 0.2);
+      color: var(--neutral);
+      border: 1px solid var(--neutral);
+    }
+
+    .badge-girando {
+      background: rgba(0, 255, 136, 0.12);
+      color: var(--ok);
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    .badge-plano {
+      background: rgba(255, 204, 0, 0.12);
+      color: var(--warn);
+      border: 1px solid rgba(255, 204, 0, 0.3);
+    }
+
+    .badge-falla {
+      background: rgba(255, 51, 85, 0.15);
+      color: var(--fail);
+      border: 1px solid rgba(255, 51, 85, 0.4);
+    }
+
+    .wheel-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1rem;
+    }
+
+    .wheel-icon svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .sensor-gauge {
+      margin: 1rem 0;
+      height: 6px;
+      background: var(--bg);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .gauge-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.15s ease, background 0.3s;
+      background: var(--neutral);
+    }
+
+    .sensor-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+    }
+
+    .metric {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 3px;
+      padding: 0.5rem 0.7rem;
+    }
+
+    .metric-label {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: var(--text);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      color: var(--text);
+      margin-top: 0.1rem;
+    }
+
+    .bottom-panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media(max-width:900px) {
+      .bottom-panels { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 4px;
+      padding: 1.2rem 1.5rem;
+    }
+
+    .panel-title {
+      font-family: var(--font-display);
+      font-size: 0.65rem;
+      color: var(--text);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--bg);
+    }
+
+    #event-log {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      height: 180px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    #event-log::-webkit-scrollbar { width: 4px; }
+    #event-log::-webkit-scrollbar-track { background: var(--bg); }
+    #event-log::-webkit-scrollbar-thumb { background: var(--bg); }
+
+    .log-entry {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      padding: 0.25rem 0;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06); /* FIX #8: color visible en fondo blanco */
+    }
+
+    .log-time { color: var(--neutral); white-space: nowrap; flex-shrink: 0; }
+    .log-msg  { color: var(--text); }
+
+    .log-ok   .log-msg { color: var(--ok); }
+    .log-warn .log-msg { color: var(--warn); }
+    .log-fail .log-msg { color: var(--fail); }
+
+    /* FIX #8: colores del diag-log también visibles en fondo blanco */
+    #diag-log .log-entry {
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.6rem;
+    }
+
+    .summary-item {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 3px;
+      padding: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .summary-count {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      font-weight: 900;
+    }
+
+    .summary-label {
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: var(--bg);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .count-ok   { color: var(--ok); }
+    .count-warn { color: var(--warn); }
+    .count-fail { color: var(--fail); }
+    .count-init { color: var(--neutral); }
+
+    .info-page { max-width: 860px; margin: 0 auto; }
+
+    .info-section {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 4px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .info-section h2 {
+      font-family: var(--font-display);
+      font-size: 0.85rem;
+      color: var(--bg);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--bg);
+    }
+
+    .info-section p {
+      color: var(--bg);
+      line-height: 1.8;
+      font-size: 0.9rem;
+      margin-bottom: 0.8rem;
+    }
+
+    .info-section ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .info-section ul li {
+      display: flex;
+      gap: 0.8rem;
+      align-items: flex-start;
+      font-size: 0.88rem;
+      line-height: 1.6;
+      color: var(--text);
+    }
+
+    .info-section ul li::before {
+      content: '▸';
+      color: var(--bg);
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+
+    .team-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .team-card {
+      background: var(--wt);
+      border: 2px solid var(--bg);
+      border-radius: 4px;
+      padding: 1.2rem;
+      text-align: center;
+    }
+
+    .team-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--bg), var(--bg));
+      margin: 0 auto 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 900;
+      color: var(--wt);
+    }
+
+    .team-role {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      color: var(--bg);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .team-name {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--bg);
+      margin-top: 0.2rem;
+    }
+
+    .state-table { width: 100%; border-collapse: collapse; }
+
+    .state-table th,
+    .state-table td {
+      padding: 0.6rem 1rem;
+      text-align: left;
+      font-size: 0.82rem;
+      border-bottom: 1px solid var(--bg);
+    }
+
+    .state-table th {
+      font-family: var(--font-mono);
+      font-size: 1rem;
+      color: var(--text);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .state-table td { color: var(--text); }
+    .state-table tr:last-child td { border-bottom: none; }
+
+    .ws-config {
+      display: flex;
+      gap: 0.8rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .ws-config input {
+      background: var(--wt);
+      border: 1px solid var(--bg);
+      border-radius: 3px;
+      color: var(--bg);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      padding: 0.5rem 0.8rem;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .ws-config input:focus { outline: 2px solid var(--bg); }
+    .ws-config input::placeholder { color: #666; opacity: 1; }
+
+    .btn {
+      background: var(--wt);
+      color: var(--bg);
+      border: 1px solid var(--bg);
+      border-radius: 3px;
+      font-family: var(--font-display);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 0.55rem 1.2rem;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      text-transform: uppercase;
+    }
+
+    .btn:hover { opacity: 0.85; }
+    .btn.danger { background: var(--fail); color: var(--wt); border-color: var(--fail); }
+
+    code { color: var(--bg); font-family: var(--font-mono); }
+  </style>
+</head>
+
+<body>
+
+  <nav>
+    <div class="nav-logo">Diagnostico<span>//</span>Sensores</div>
+    <div class="nav-tabs">
+      <div class="nav-tab active" data-page="dashboard">Principal</div>
+      <div class="nav-tab" data-page="equipo">Equipo</div>
+      <div class="nav-tab" data-page="funcionamiento">Funcionamiento</div>
+      <div class="nav-tab" data-page="diagnostico">Diagnóstico</div>
+      <div class="nav-tab" data-page="configuracion">Configuración</div>
+    </div>
+    <div class="nav-status">
+      <div class="status-dot" id="ws-dot"></div>
+      <span id="ws-label">DESCONECTADO</span>
+    </div>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="dashboard-header">
+      <div class="dashboard-title">Monitor de Sensores ABS — Tiempo Real</div>
+      <div class="dashboard-time" id="clock">--:--:--</div>
+    </div>
+    <div class="sensors-grid" id="sensors-grid"></div>
+    <div class="bottom-panels">
+      <div class="panel">
+        <div class="panel-title">Resumen del Sistema</div>
+        <div class="summary-grid">
+          <div class="summary-item"><span class="summary-count count-ok"   id="count-girando">0</span><span class="summary-label">Girando</span></div>
+          <div class="summary-item"><span class="summary-count count-warn" id="count-plano">0</span><span class="summary-label">Rin Plano</span></div>
+          <div class="summary-item"><span class="summary-count count-fail" id="count-falla">0</span><span class="summary-label">Falla</span></div>
+          <div class="summary-item"><span class="summary-count count-init" id="count-init">4</span><span class="summary-label">Iniciando</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Log de Eventos</div>
+        <div id="event-log">
+          <div class="log-entry"><span class="log-time">--:--:--</span><span class="log-msg">Esperando conexión...</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EQUIPO -->
+  <div class="page" id="page-equipo">
+    <div class="info-page">
+      <div class="info-section">
+        <h2>Nuestro Equipo</h2>
+        <p>Somos estudiantes del Centro de Enseñanza Técnica Industrial, en la carrera de Desarrollo de Software.</p>
+        <div class="team-grid">
+          <div class="team-card">
+            <div class="team-avatar">01</div>
+            <div class="team-role">Product Owner / Development Team</div>
+            <div class="team-name">Luis Fernando Martinez Moncayo</div>
+          </div>
+          <div class="team-card">
+            <div class="team-avatar">02</div>
+            <div class="team-role">Scrum Master / Development Team</div>
+            <div class="team-name">Roger Alexander García Linares</div>
+          </div>
+          <div class="team-card">
+            <div class="team-avatar">03</div>
+            <div class="team-role">Development Team</div>
+            <div class="team-name">Paulo Gael Venegas Becerra</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FUNCIONAMIENTO -->
+  <div class="page" id="page-funcionamiento">
+    <div class="info-page">
+      <div class="info-section">
+        <h2>¿Cómo funciona el sistema?</h2>
+        <p>El sistema usa 4 sensores Sharp GP2Y0A21YK0F montados frente a cada rueda simulada. Emiten un haz infrarrojo
+          y miden la distancia por triangulación, entregando una señal analógica proporcional a la distancia (10–80 cm).
+        </p>
+        <p>El Arduino MEGA lee las 4 señales a 100 Hz, clasifica el estado de cada sensor y envía un JSON por puerto
+          Serial. Un script Python retransmite esos datos a esta página por WebSocket, logrando visualización en tiempo
+          real sin necesidad de refrescar.</p>
+      </div>
+      <div class="info-section">
+        <h2>Estados de los Sensores</h2>
+        <table class="state-table">
+          <thead>
+            <tr>
+              <th>Estado</th>
+              <th>Condición</th>
+              <th>Criterio de detección</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="sensor-badge badge-iniciando">INICIANDO</span></td>
+              <td>Calibración inicial</td>
+              <td>Primeras 50 muestras — establece baseline</td>
+            </tr>
+            <tr>
+              <td><span class="sensor-badge badge-girando">GIRANDO</span></td>
+              <td>Rueda girando normalmente</td>
+              <td>Variación cíclica ≥ 80 ADC respecto al baseline</td>
+            </tr>
+            <tr>
+              <td><span class="sensor-badge badge-plano">RIN PLANO</span></td>
+              <td>Sensor funcional, sin rotación</td>
+              <td>Valor constante en zona de rin por más de 2 s</td>
+            </tr>
+            <tr>
+              <td><span class="sensor-badge badge-falla">FALLA</span></td>
+              <td>Sensor defectuoso</td>
+              <td>Valores fuera de rango físico o σ &gt; 120 ADC</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="info-section">
+        <h2>Flujo de Datos</h2>
+        <ul>
+          <li>4× Sharp GP2Y0A21YK0F conectados a pines A0–A3 del Arduino MEGA</li>
+          <li>Arduino muestrea a 100 Hz con temporizador sin delay() y clasifica por rangos ADC</li>
+          <li>Salida: JSON por Serial USB a 115200 baud cada 10 ms</li>
+          <li>abs_bridge.py lee el Serial y retransmite por WebSocket (ws://IP:8765)</li>
+          <li>Esta página se conecta al WebSocket y actualiza la UI en tiempo real</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIAGNÓSTICO -->
+  <div class="page" id="page-diagnostico">
+    <div class="info-page">
+      <div class="info-section">
+        <h2>Historial de Cambios de Estado</h2>
+        <div id="diag-log"
+          style="font-family:var(--font-mono);font-size:0.78rem;max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:0.3rem;margin-top:0.5rem">
+          <div style="color:var(--neutral)">Sin eventos registrados aún.</div>
+        </div>
+      </div>
+      <div class="info-section">
+        <h2>📋 Fallos Registrados (Base de Datos)</h2>
+        <div style="max-height:300px; overflow-y:auto;">
+          <table class="state-table" id="faults-table">
+            <thead>
+              <tr>
+                <th>Fecha / Hora</th>
+                <th>Sensor</th>
+                <th>De → A</th>
+              </tr>
+            </thead>
+            <tbody id="faults-tbody">
+              <tr>
+                <td colspan="3" style="color:var(--neutral);text-align:center">Cargando...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="info-section">
+        <h2>Lecturas RAW en Tiempo Real</h2>
+        <table class="state-table">
+          <thead>
+            <tr>
+              <th>Sensor</th>
+              <th>ADC</th>
+              <th>Voltaje</th>
+              <th>Dist. aprox.</th>
+              <th>Estado</th>
+              <th>Baseline</th>
+            </tr>
+          </thead>
+          <tbody id="raw-tbody">
+            <tr>
+              <td colspan="6" style="color:var(--neutral);text-align:center">Sin datos</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIGURACIÓN -->
+  <div class="page" id="page-configuracion">
+    <div class="info-page">
+      <div class="info-section">
+        <h2>Conexión WebSocket</h2>
+        <p>Ingresa la dirección del servidor donde corre <code>abs_bridge.py</code>. Usa <code>localhost</code> si corre
+          en esta misma PC, o la IP de la red local si corre en otra máquina.</p>
+        <div class="ws-config">
+          <input type="text" id="ws-url-input" value="ws://localhost:8765" placeholder="ws://IP:8765" />
+          <button class="btn" id="btn-connect">Conectar</button>
+          <button class="btn danger" id="btn-disconnect">Desconectar</button>
+        </div>
+        <!-- FIX #9: Controles de reconexión automática -->
+        <div style="display:flex;align-items:center;gap:0.8rem;margin-top:0.5rem">
+          <input type="checkbox" id="auto-reconnect" checked style="cursor:pointer"/>
+          <label for="auto-reconnect" style="font-family:var(--font-mono);font-size:0.75rem;cursor:pointer">
+            Reconexión automática (cada 5 s)
+          </label>
+        </div>
+      </div>
+      <div class="info-section">
+        <h2>Nombres de Sensores</h2>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.8rem" id="sensor-names-form"></div>
+        <button class="btn" style="margin-top:1rem" id="btn-save-names">Guardar Nombres</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const WS_DEFAULT = "ws://localhost:8765";
+    let ws = null;
+    let sensorNames = ["Sensor FL (Del. Izq.)", "Sensor FR (Del. Der.)", "Sensor RL (Tras. Izq.)", "Sensor RR (Tras. Der.)"];
+    let prevStates = [null, null, null, null];
+    const diagLog = [];
+    const POS_TAG = ["FL", "FR", "RL", "RR"];
+
+    // FIX #9: Control de reconexión automática
+    let reconnectTimer = null;
+    let manualDisconnect = false;
+
+    // ── Navegación ──────────────────────────────────────────
+    document.querySelectorAll(".nav-tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+        tab.classList.add("active");
+        document.getElementById("page-" + tab.dataset.page).classList.add("active");
+      });
+    });
+
+    setInterval(() => {
+      document.getElementById("clock").textContent = new Date().toLocaleTimeString("es-MX", { hour12: false });
+    }, 1000);
+
+    // ── Conversión ADC ──────────────────────────────────────
+    // FIX #10: Cambiar <= a < para evitar división por cero exacta en v === 0.42
+    function adcToCm(adc) {
+      if (adc < 20) return 80;
+      const v = (adc / 1023) * 5.0;
+      if (v < 0.42) return 80;  // FIX #10: < en lugar de <=
+      return Math.max(10, Math.min(80, 27.86 / (v - 0.42)));
+    }
+
+    // ── Inicialización de tarjetas ──────────────────────────
+    function initSensorCards() {
+      const grid = document.getElementById("sensors-grid");
+      grid.innerHTML = [0, 1, 2, 3].map(i => `
+        <div class="sensor-card" id="card-${i}">
+          <div class="wheel-icon">
+            <svg viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg" id="wheel-${i}">
+              <circle cx="25" cy="25" r="22" fill="none" stroke="#2a3545" stroke-width="3"/>
+              <circle cx="25" cy="25" r="8"  fill="none" stroke="#2a3545" stroke-width="2"/>
+              <line x1="25" y1="3"  x2="25" y2="17" stroke="#2a3545" stroke-width="2"/>
+              <line x1="25" y1="33" x2="25" y2="47" stroke="#2a3545" stroke-width="2"/>
+              <line x1="3"  y1="25" x2="17" y2="25" stroke="#2a3545" stroke-width="2"/>
+              <line x1="33" y1="25" x2="47" y2="25" stroke="#2a3545" stroke-width="2"/>
+              <line x1="9"  y1="9"  x2="19" y2="19" stroke="#2a3545" stroke-width="2"/>
+              <line x1="31" y1="31" x2="41" y2="41" stroke="#2a3545" stroke-width="2"/>
+              <line x1="41" y1="9"  x2="31" y2="19" stroke="#2a3545" stroke-width="2"/>
+              <line x1="19" y1="31" x2="9"  y2="41" stroke="#2a3545" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="sensor-header">
+            <div>
+              <div class="sensor-id">SENSOR ${i + 1} — ${POS_TAG[i]}</div>
+              <div class="sensor-name" id="sname-${i}">${sensorNames[i]}</div>
+            </div>
+            <div class="sensor-badge badge-iniciando" id="badge-${i}">INICIANDO</div>
+          </div>
+          <div class="sensor-gauge"><div class="gauge-fill" id="gauge-${i}" style="width:0%"></div></div>
+          <div class="sensor-metrics">
+            <div class="metric"><div class="metric-label">ADC Raw</div><div class="metric-value" id="adc-${i}">—</div></div>
+            <div class="metric"><div class="metric-label">Voltaje</div><div class="metric-value" id="volt-${i}">— V</div></div>
+            <div class="metric"><div class="metric-label">Dist. aprox.</div><div class="metric-value" id="dist-${i}">— cm</div></div>
+            <div class="metric"><div class="metric-label">Baseline</div><div class="metric-value" id="base-${i}">—</div></div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    const STATE_COLOR = {
+      GIRANDO:   "var(--ok)",
+      PLANO:     "var(--warn)",
+      FALLA:     "var(--fail)",
+      INICIANDO: "var(--neutral)"
+    };
+
+    // ── Actualización de tarjeta de sensor ─────────────────
+    function updateCard(s) {
+      const { id, adc, nombre, cal, base } = s;
+
+      // FIX #6: Guardia — si el DOM no está listo, salir silenciosamente
+      const card = document.getElementById("card-" + id);
+      if (!card) return;
+
+      const volt  = ((adc / 1023) * 5.0).toFixed(3);
+      const dist  = adcToCm(adc).toFixed(1);
+      const pct   = (adc / 1023 * 100).toFixed(1);
+      const badge = document.getElementById("badge-" + id);
+      const wheel = document.getElementById("wheel-" + id);
+      const gauge = document.getElementById("gauge-" + id);
+
+      card.className  = "sensor-card estado-" + nombre.toLowerCase();
+      badge.className = "sensor-badge badge-" + nombre.toLowerCase();
+      badge.textContent = nombre === "GIRANDO" ? "GIRANDO ●" : nombre;
+
+      gauge.style.width      = pct + "%";
+      gauge.style.background = STATE_COLOR[nombre] || "var(--neutral)";
+
+      document.getElementById("adc-"  + id).textContent = adc;
+      document.getElementById("volt-" + id).textContent = volt + " V";
+      document.getElementById("dist-" + id).textContent = dist + " cm";
+      document.getElementById("base-" + id).textContent = cal ? base : "Cal...";
+
+      const c = STATE_COLOR[nombre] || "#2a3545";
+      wheel.querySelectorAll("circle,line").forEach(el => el.setAttribute("stroke", c));
+
+      if (nombre === "GIRANDO")       wheel.style.animation = "spin 0.8s linear infinite";
+      else if (nombre === "PLANO")    wheel.style.animation = "spin 4s linear infinite";
+      else                            wheel.style.animation = "none";
+
+      if (prevStates[id] !== null && prevStates[id] !== nombre) {
+        logEvent(id, prevStates[id], nombre);
+      }
+      prevStates[id] = nombre;
+    }
+
+    // ── Log de eventos ──────────────────────────────────────
+    function logEvent(id, from, to) {
+      const time = new Date().toLocaleTimeString("es-MX", { hour12: false });
+      const msg  = `S${id + 1} [${sensorNames[id]}]: ${from} → ${to}`;
+      const cls  = to === "FALLA" ? "log-fail" : to === "PLANO" ? "log-warn" : "log-ok";
+
+      const log = document.getElementById("event-log");
+      const e   = document.createElement("div");
+      e.className = "log-entry " + cls;
+      e.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
+      log.insertBefore(e, log.firstChild);
+      if (log.children.length > 60) log.removeChild(log.lastChild);
+
+      diagLog.unshift({ time, msg, cls });
+      const dl = document.getElementById("diag-log");
+      dl.innerHTML = diagLog.map(ev =>
+        `<div class="log-entry ${ev.cls}">
+          <span class="log-time">${ev.time}</span>
+          <span class="log-msg">${ev.msg}</span>
+        </div>`
+      ).join("");
+    }
+
+    // ── Tabla RAW ────────────────────────────────────────────
+    function updateRawTable(sensors) {
+      document.getElementById("raw-tbody").innerHTML = sensors.map(s => {
+        const v   = ((s.adc / 1023) * 5.0).toFixed(3);
+        const d   = adcToCm(s.adc).toFixed(1);
+        const cls = { GIRANDO: "badge-girando", PLANO: "badge-plano", FALLA: "badge-falla", INICIANDO: "badge-iniciando" }[s.nombre];
+        return `<tr>
+          <td>${sensorNames[s.id]}</td>
+          <td>${s.adc}</td>
+          <td>${v} V</td>
+          <td>${d} cm</td>
+          <td><span class="sensor-badge ${cls}">${s.nombre}</span></td>
+          <td>${s.cal ? s.base : "—"}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    // ── Resumen del sistema ──────────────────────────────────
+    function updateSummary(sensors) {
+      const c = { GIRANDO: 0, PLANO: 0, FALLA: 0, INICIANDO: 0 };
+      sensors.forEach(s => { c[s.nombre] = (c[s.nombre] || 0) + 1; });
+      document.getElementById("count-girando").textContent = c.GIRANDO;
+      document.getElementById("count-plano").textContent   = c.PLANO;
+      document.getElementById("count-falla").textContent   = c.FALLA;
+      document.getElementById("count-init").textContent    = c.INICIANDO;
+    }
+
+    // ── Historial de fallos BD ───────────────────────────────
+    function displayFaultHistory(faults) {
+      const tbody = document.getElementById("faults-tbody");
+      if (!faults || faults.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="color:var(--neutral);text-align:center">No hay fallos registrados</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = faults.map(f => {
+        const date = new Date(f.timestamp).toLocaleString("es-MX");
+        return `<tr>
+          <td>${date}</td>
+          <td>${f.sensor_name || `Sensor ${f.sensor_id + 1}`}</td>
+          <td><span style="color:var(--warn)">${f.from_state}</span> → <span style="color:var(--fail)">${f.to_state}</span></td>
+        </tr>`;
+      }).join("");
+    }
+
+    // FIX #7: Actualizar nombres de sensores desde el JSON del Arduino
+    function updateSensorNamesFromServer(names) {
+      if (!Array.isArray(names)) return;
+      names.forEach((name, i) => {
+        if (i < sensorNames.length && name) {
+          sensorNames[i] = name;
+          // Actualizar la tarjeta en el dashboard
+          const el = document.getElementById("sname-" + i);
+          if (el) el.textContent = name;
+          // Actualizar el input en configuración si existe
+          const input = document.getElementById("name-input-" + i);
+          if (input) input.value = name;
+        }
+      });
+    }
+
+    // ── WebSocket ────────────────────────────────────────────
+    function connectWS(url) {
+      // Limpiar reconexión pendiente si la hay
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (ws) { ws.close(); ws = null; }
+
+      try { ws = new WebSocket(url); }
+      catch (e) { setWSStatus("disconnected"); scheduleReconnect(url); return; }
+
+      ws.onopen = () => {
+        setWSStatus("connected");
+        addEventLog("Conectado a " + url, "log-ok");
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const data = JSON.parse(evt.data);
+
+          if (data.type === "history") return;
+
+          if (data.type === "fault_history") {
+            displayFaultHistory(data.data);
+            return;
+          }
+
+          // FIX #7: Procesar nombres de sensores del servidor
+          if (data.names) {
+            updateSensorNamesFromServer(data.names);
+          }
+
+          // Mensaje de error del servidor (ej: serial perdido)
+          if (data.type === "error") {
+            addEventLog("⚠ " + data.message, "log-fail");
+            return;
+          }
+
+          if (!data.s) return;
+          data.s.forEach(s => updateCard(s));
+          updateSummary(data.s);
+          updateRawTable(data.s);
+        } catch (e) { console.warn("Error procesando mensaje WS:", e); }
+      };
+
+      ws.onclose = () => {
+        setWSStatus("disconnected");
+        // FIX #9: Reconexión automática si no fue desconexión manual
+        scheduleReconnect(url);
+      };
+
+      ws.onerror = () => {
+        setWSStatus("disconnected");
+      };
+    }
+
+    // FIX #9: Función de reconexión automática con backoff
+    function scheduleReconnect(url) {
+      if (manualDisconnect) return;
+      const autoReconnectEnabled = document.getElementById("auto-reconnect")?.checked ?? true;
+      if (!autoReconnectEnabled) return;
+
+      setWSStatus("reconnecting");
+      reconnectTimer = setTimeout(() => {
+        addEventLog("Intentando reconexión...", "log-warn");
+        connectWS(url);
+      }, 5000);
+    }
+
+    function setWSStatus(status) {
+      const dot   = document.getElementById("ws-dot");
+      const label = document.getElementById("ws-label");
+      dot.className = "status-dot";
+      if (status === "connected") {
+        dot.classList.add("connected");
+        label.textContent = "EN LÍNEA";
+      } else if (status === "reconnecting") {
+        dot.classList.add("reconnecting");
+        label.textContent = "RECONECTANDO";
+      } else {
+        label.textContent = "DESCONECTADO";
+      }
+    }
+
+    function addEventLog(msg, cls = "") {
+      const time = new Date().toLocaleTimeString("es-MX", { hour12: false });
+      const log  = document.getElementById("event-log");
+      const e    = document.createElement("div");
+      e.className = "log-entry " + cls;
+      e.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
+      log.insertBefore(e, log.firstChild);
+      if (log.children.length > 60) log.removeChild(log.lastChild);
+    }
+
+    // ── Formulario de nombres ────────────────────────────────
+    function initNamesForm() {
+      document.getElementById("sensor-names-form").innerHTML = sensorNames.map((n, i) => `
+        <div>
+          <div style="font-family:var(--font-mono);font-size:0.65rem;color:var(--neutral);margin-bottom:0.3rem;letter-spacing:0.1em">
+            SENSOR ${i + 1} (${POS_TAG[i]})
+          </div>
+          <input id="name-input-${i}" type="text" value="${n}"
+            style="background:var(--wt);border:1px solid var(--bg);border-radius:3px;color:var(--bg);font-size:1rem;padding:0.5rem 0.7rem;width:100%"/>
+        </div>
+      `).join("");
+    }
+
+    // ── Eventos de botones ───────────────────────────────────
+    document.getElementById("btn-connect").addEventListener("click", () => {
+      manualDisconnect = false;
+      connectWS(document.getElementById("ws-url-input").value.trim() || WS_DEFAULT);
+    });
+
+    document.getElementById("btn-disconnect").addEventListener("click", () => {
+      manualDisconnect = true;  // FIX #9: marcar como desconexión intencional
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+      if (ws) { ws.close(); ws = null; }
+      setWSStatus("disconnected");
+    });
+
+    document.getElementById("btn-save-names").addEventListener("click", () => {
+      for (let i = 0; i < 4; i++) {
+        const v = document.getElementById("name-input-" + i).value.trim();
+        if (v) {
+          sensorNames[i] = v;
+          const el = document.getElementById("sname-" + i);
+          if (el) el.textContent = v;
+        }
+      }
+    });
+
+    // ── Inicialización ───────────────────────────────────────
+    // FIX #6: initSensorCards() ANTES de connectWS() para que el DOM esté listo
+    initSensorCards();
+    initNamesForm();
+    connectWS(WS_DEFAULT);
+  </script>
+</body>
+
+</html>
